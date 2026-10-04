@@ -1,0 +1,69 @@
+schemaVersion: "2"
+kind: mixin
+name: hindsight-cloud
+version: "0.2.0"
+displayName: Hindsight Cloud (memory per repo)
+description: "Long-term memory for Claude Code via the Hindsight Coding Agents plugin, one bank per git repo, stored in Hindsight Cloud. Needs a key: sbx secret set -g hindsight (the kit holds no key)."
+sourceURL: https://github.com/vectorize-io/hindsight/tree/main/hindsight-integrations/coding-agents
+requires:
+  agent: claude
+
+# The bank id is `coding-agent::<repo directory name>`, so the same repo cloned
+# under the same name on any machine shares one memory.
+
+permissions:
+  network:
+    allow:
+      - registry.npmjs.org:443      # install: npx fetches the plugin
+      - api.hindsight.vectorize.io  # runtime: every memory call
+
+credentials:
+  - service: hindsight
+    description: "Hindsight Cloud API key"
+    required: true
+    apiKey:
+      name: HINDSIGHT_API_TOKEN
+      # The sandbox only ever sees a sentinel; the proxy swaps in the real key.
+      proxyManaged: true
+      inject:
+        - domain: api.hindsight.vectorize.io
+          scheme: bearer
+
+environment:
+  variables:
+    # Cloud is the plugin's default server; the token comes from the credential above.
+    HINDSIGHT_AUTO_UPDATE: "false"  # no daily npm check from inside a sandbox
+
+setup:
+  install:
+    # Stages the runtime in ~/.hindsight/coding-agents, adds three hooks to
+    # ~/.claude/settings.json, registers the MCP server and the companion skill.
+    # stdin from /dev/null keeps it non-interactive, which defaults to Cloud.
+    - command: npx -y @vectorize-io/hindsight-coding-agents install claude-code < /dev/null
+      user: "1000"
+      description: Install the Hindsight Coding Agents plugin for Claude Code
+  startup:
+    # The platform seeds ~/.claude/settings.json late at create time, dropping the
+    # hooks. Re-run the (idempotent, offline) installer once that write has landed.
+    - command:
+        - sh
+        - -c
+        - |
+          set -e
+          S=/home/agent/.claude/settings.json
+          for _ in $(seq 60); do grep -q themeId "$S" 2>/dev/null && break; sleep 1; done
+          chown agent:agent "$S"
+          su - agent -c 'node ~/.hindsight/coding-agents/dist/installer.js install claude-code < /dev/null' \
+            > /tmp/hindsight-reconcile.log 2>&1
+      user: "0"
+      description: Re-add the Hindsight hooks after settings.json is seeded
+
+agentInstructions:
+  content: |
+    ## Hindsight memory
+
+    Long-term memory for this repo is active via the Hindsight Coding Agents
+    plugin, backed by Hindsight Cloud. Relevant knowledge is injected on the
+    first prompt and sessions are retained automatically. Use the `hindsight_*`
+    MCP tools to search memory, read knowledge pages, or store something on
+    request.
