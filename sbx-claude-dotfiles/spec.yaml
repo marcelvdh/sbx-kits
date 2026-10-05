@@ -7,17 +7,13 @@ description: "Copies your personal Claude Code config (CLAUDE.md, rules, agents,
 requires:
   agent: claude
 
-# Everything under files/home/ is copied to /home/agent/ by sbx itself, before
-# setup.install runs. sync.sh fills files/ from your Claude config directory on
-# the host ($CLAUDE_DOTFILES_SRC); kits can't symlink outside their own
-# directory, so it has to be a copy. files/ is gitignored: it holds personal
-# config.
+# files/home/ is copied to /home/agent/ by sbx before install runs; sync.sh
+# fills it (kits can't symlink outside their directory). Gitignored: personal.
 #
-# settings.json is not copied to ~/.claude/settings.json: the kit spec reserves
-# that path for the sandbox. sync.sh stages it in ~/.claude-dotfiles/ instead,
-# and install registers it as a Claude Code managed-settings drop-in. Claude
-# Code merges lists (hooks, permissions) across settings scopes, so other kits'
-# hooks in ~/.claude/settings.json keep working.
+# ~/.claude/settings.json is reserved for the sandbox, so sync.sh stages
+# settings.json in ~/.claude-dotfiles/ and install registers it as a managed
+# settings drop-in. Claude Code merges hooks and permissions across scopes, so
+# other kits' hooks keep working.
 
 setup:
   install:
