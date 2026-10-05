@@ -1,0 +1,49 @@
+schemaVersion: "2"
+kind: mixin
+name: claude-dotfiles
+version: "0.3.0"
+displayName: Claude dotfiles (personal config)
+description: "Copies your personal Claude Code config (CLAUDE.md, rules, agents, commands, skills, settings) into the sandbox. Refresh the bundled copy with sync.sh."
+requires:
+  agent: claude
+
+# Everything under files/home/ is copied to /home/agent/ by sbx itself, before
+# setup.install runs. sync.sh fills files/ from your Claude config directory on
+# the host ($CLAUDE_DOTFILES_SRC); kits can't symlink outside their own
+# directory, so it has to be a copy. files/ is gitignored: it holds personal
+# config.
+#
+# settings.json is not copied to ~/.claude/settings.json: the kit spec reserves
+# that path for the sandbox. sync.sh stages it in ~/.claude-dotfiles/ instead,
+# and install registers it as a Claude Code managed-settings drop-in. Claude
+# Code merges lists (hooks, permissions) across settings scopes, so other kits'
+# hooks in ~/.claude/settings.json keep working.
+
+setup:
+  install:
+    # Claude Code refuses to start on an unparseable managed-settings file, so
+    # only install the drop-in if it is a JSON object. Idempotent: install -D
+    # overwrites the same file on every run.
+    - command: |
+        set -e
+        S=/home/agent/.claude-dotfiles/settings.json
+        D=/etc/claude-code/managed-settings.d/50-dotfiles.json
+        if [ ! -f "$S" ]; then
+          echo "claude-dotfiles: no settings.json bundled, skipping" >&2
+        elif jq -e 'type == "object"' "$S" > /dev/null 2>&1; then
+          install -D -m 0644 "$S" "$D"
+        else
+          echo "claude-dotfiles: $S is not a JSON object, skipping" >&2
+        fi
+      user: "0"
+      description: Register the dotfiles settings.json as a managed-settings drop-in
+
+agentInstructions:
+  content: |
+    ## Claude dotfiles
+
+    This sandbox's ~/.claude config (CLAUDE.md, rules, agents, commands,
+    skills) and the settings in
+    /etc/claude-code/managed-settings.d/50-dotfiles.json come from the user's
+    personal dotfiles, not from this sandbox. Don't "fix" them in place; flag
+    that the change belongs in the user's dotfiles repo on the host.
